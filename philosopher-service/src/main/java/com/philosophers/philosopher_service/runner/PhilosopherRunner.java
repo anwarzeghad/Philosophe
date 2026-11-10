@@ -60,7 +60,24 @@ public class PhilosopherRunner implements CommandLineRunner {
         }
     }
 
+    private boolean isForkAvailable(int forkId) {
+        try {
+            return Boolean.TRUE.equals(
+                restClient.get()
+                    .uri("http://localhost:8082/forks/" + forkId + "/available")
+                    .retrieve()
+                    .body(Boolean.class)
+            );
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    // 1) interroger le superviseur, 2) si disponible, demander la fourchette
     private boolean requestFork(int forkId) {
+        if (!isForkAvailable(forkId)) {
+            return false;
+        }
         try {
             return Boolean.TRUE.equals(
                 restClient.post()

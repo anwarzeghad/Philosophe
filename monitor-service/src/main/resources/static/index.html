@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tableau de bord des philosophes</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 24px; background: #f5f5f5; color: #222; }
+  h1 { font-size: 1.4rem; }
+  #cards { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 24px; }
+  .card { background: #fff; border-radius: 8px; padding: 12px 16px; min-width: 150px; border-left: 8px solid #999; box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+  .HUNGRY { border-color: #e67e22; }
+  .EATING { border-color: #27ae60; }
+  .DONE   { border-color: #2980b9; }
+  .state { font-weight: bold; }
+  table { border-collapse: collapse; background: #fff; width: 100%; max-width: 640px; }
+  th, td { border: 1px solid #ddd; padding: 4px 8px; text-align: left; }
+  th { background: #eee; }
+</style>
+</head>
+<body>
+<h1>Le dîner des philosophes</h1>
+<div id="cards"></div>
+<h2>Historique (ordonné par horloge logique)</h2>
+<table>
+  <thead><tr><th>Horloge</th><th>Philosophe</th><th>État</th></tr></thead>
+  <tbody id="history"></tbody>
+</table>
+<script>
+async function refresh() {
+  try {
+    const [state, history] = await Promise.all([
+      fetch('/events/state').then(r => r.json()),
+      fetch('/events').then(r => r.json())
+    ]);
+    const cards = document.getElementById('cards');
+    cards.innerHTML = '';
+    Object.entries(state).forEach(([id, e]) => {
+      const d = document.createElement('div');
+      d.className = 'card ' + e.state;
+      d.innerHTML = '<div>Philosophe ' + id + '</div><div class="state">' + e.state +
+                    '</div><div>horloge ' + e.logicalClock + '</div>';
+      cards.appendChild(d);
+    });
+    // Historique : 50 derniers evenements, tries par horloge puis par philosophe
+    const all = Object.values(history).flat()
+      .sort((a, b) => a.logicalClock - b.logicalClock || a.philosopherId - b.philosopherId)
+      .slice(-50).reverse();
+    document.getElementById('history').innerHTML = all.map(e =>
+      '<tr><td>' + e.logicalClock + '</td><td>' + e.philosopherId + '</td><td>' + e.state + '</td></tr>').join('');
+  } catch (err) { console.error(err); }
+}
+refresh();
+setInterval(refresh, 1000);
+</script>
+</body>
+</html>
