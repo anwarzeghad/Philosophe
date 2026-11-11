@@ -4,14 +4,14 @@ import com.philosophers.philosopher_service.dto.EventDto;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.Random;
 
 @Component
 public class PhilosopherRunner implements CommandLineRunner {
 
-    private final RestClient restClient;
+    private final RestTemplate restTemplate;
     private final Random random = new Random();
 
     private long logicalClock = 0;
@@ -22,8 +22,8 @@ public class PhilosopherRunner implements CommandLineRunner {
     @Value("${philosophers.total:5}")
     private int totalPhilosophers;
 
-    public PhilosopherRunner(RestClient restClient) {
-        this.restClient = restClient;
+    public PhilosopherRunner(RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
     }
 
     @Override
@@ -35,9 +35,11 @@ public class PhilosopherRunner implements CommandLineRunner {
 
         while (true) {
             // 1. Penser
+            logState("réfléchit");
             Thread.sleep(random.nextInt(2000) + 1000);
 
             // 2. Avoir faim
+            logState("attend (a faim)");
             sendEvent("HUNGRY");
 
             // 3. Demander la 1ère fourchette (gauche)
@@ -47,9 +49,11 @@ public class PhilosopherRunner implements CommandLineRunner {
                 boolean hasRight = requestFork(rightFork);
                 if (hasRight) {
                     // 4. Manger
+                    logState("mange");
                     sendEvent("EATING");
                     Thread.sleep(random.nextInt(2000) + 1000);
                     sendEvent("DONE");
+                    logState("a fini de manger");
 
                     // Libérer la fourchette droite
                     releaseFork(rightFork);
@@ -60,13 +64,17 @@ public class PhilosopherRunner implements CommandLineRunner {
         }
     }
 
+    // Affiche l'état du philosophe dans sa propre console
+    private void logState(String state) {
+        System.out.println("Philosophe " + philosopherId + " : " + state);
+    }
+
     private boolean isForkAvailable(int forkId) {
         try {
             return Boolean.TRUE.equals(
-                restClient.get()
-                    .uri("http://localhost:8082/forks/" + forkId + "/available")
-                    .retrieve()
-                    .body(Boolean.class)
+                restTemplate.getForObject(
+                    "http://localhost:8082/forks/" + forkId + "/available",
+                    Boolean.class)
             );
         } catch (Exception e) {
             return false;
@@ -80,10 +88,10 @@ public class PhilosopherRunner implements CommandLineRunner {
         }
         try {
             return Boolean.TRUE.equals(
-                restClient.post()
-                    .uri("http://localhost:8082/forks/" + forkId + "/take")
-                    .retrieve()
-                    .body(Boolean.class)
+                restTemplate.postForObject(
+                    "http://localhost:8082/forks/" + forkId + "/take",
+                    null,
+                    Boolean.class)
             );
         } catch (Exception e) {
             return false;
@@ -92,10 +100,10 @@ public class PhilosopherRunner implements CommandLineRunner {
 
     private void releaseFork(int forkId) {
         try {
-            restClient.post()
-                .uri("http://localhost:8082/forks/" + forkId + "/release")
-                .retrieve()
-                .toBodilessEntity();
+            restTemplate.postForObject(
+                "http://localhost:8082/forks/" + forkId + "/release",
+                null,
+                Void.class);
         } catch (Exception e) {
             System.err.println("Erreur libération fourchette : " + e.getMessage());
         }
@@ -106,11 +114,7 @@ public class PhilosopherRunner implements CommandLineRunner {
         EventDto event = new EventDto(philosopherId, state, logicalClock);
 
         try {
-            restClient.post()
-                    .uri("http://localhost:8080/events")
-                    .body(event)
-                    .retrieve()
-                    .toBodilessEntity();
+            restTemplate.postForObject("http://localhost:8080/events", event, Void.class);
         } catch (Exception e) {
             System.err.println("Impossible de contacter le moniteur : " + e.getMessage());
         }
