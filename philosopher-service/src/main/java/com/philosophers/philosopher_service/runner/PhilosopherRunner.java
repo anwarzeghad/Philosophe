@@ -9,9 +9,10 @@ import org.springframework.web.client.RestTemplate;
 
 import java.util.Random;
 
-// Désactivable (philosopher.runner.enabled=false) pour que les tests ne lancent pas la boucle infinie
+// Version avec superviseur (partie 3.2) : active avec --philosopher.mode=supervisor
+// (par défaut, c'est DistributedPhilosopherRunner de la partie 3.3 qui tourne)
 @Component
-@ConditionalOnProperty(name = "philosopher.runner.enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(name = "philosopher.mode", havingValue = "supervisor")
 public class PhilosopherRunner implements CommandLineRunner {
 
     private final RestTemplate restTemplate;
