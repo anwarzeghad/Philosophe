@@ -2,13 +2,16 @@ package com.philosophers.philosopher_service.runner;
 
 import com.philosophers.philosopher_service.dto.EventDto;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.Random;
 
+// Désactivable (philosopher.runner.enabled=false) pour que les tests ne lancent pas la boucle infinie
 @Component
+@ConditionalOnProperty(name = "philosopher.runner.enabled", havingValue = "true", matchIfMissing = true)
 public class PhilosopherRunner implements CommandLineRunner {
 
     private final RestTemplate restTemplate;
