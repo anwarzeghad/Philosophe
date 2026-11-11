@@ -42,60 +42,42 @@ public class PhilosopherRunner implements CommandLineRunner {
             logState("attend (a faim)");
             sendEvent("HUNGRY");
 
-            // 3. Demander la 1ère fourchette (gauche)
-            boolean hasLeft = requestFork(leftFork);
-            if (hasLeft) {
-                // Demander la 2ème fourchette (droite)
-                boolean hasRight = requestFork(rightFork);
-                if (hasRight) {
-                    // 4. Manger
-                    logState("mange");
-                    sendEvent("EATING");
-                    Thread.sleep(random.nextInt(2000) + 1000);
-                    sendEvent("DONE");
-                    logState("a fini de manger");
+            // 3. Demander les deux fourchettes en une seule requête
+            if (requestBothForks(leftFork, rightFork)) {
+                // 4. Manger
+                logState("mange");
+                sendEvent("EATING");
+                Thread.sleep(random.nextInt(2000) + 1000);
+                sendEvent("DONE");
+                logState("a fini de manger");
 
-                    // Libérer la fourchette droite
-                    releaseFork(rightFork);
-                }
-                // Libérer la fourchette gauche
+                // 5. Libérer les deux fourchettes
+                releaseFork(rightFork);
                 releaseFork(leftFork);
+            } else {
+                // Refus : attendre un peu avant de réessayer
+                Thread.sleep(random.nextInt(500) + 200);
             }
         }
     }
 
-    // Affiche l'état du philosophe dans sa propre console
-    private void logState(String state) {
-        System.out.println("Philosophe " + philosopherId + " : " + state);
-    }
-
-    private boolean isForkAvailable(int forkId) {
-        try {
-            return Boolean.TRUE.equals(
-                restTemplate.getForObject(
-                    "http://localhost:8082/forks/" + forkId + "/available",
-                    Boolean.class)
-            );
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    // 1) interroger le superviseur, 2) si disponible, demander la fourchette
-    private boolean requestFork(int forkId) {
-        if (!isForkAvailable(forkId)) {
-            return false;
-        }
+    // Partie 3.1 : les deux fourchettes sont demandées ensemble au superviseur
+    private boolean requestBothForks(int leftFork, int rightFork) {
         try {
             return Boolean.TRUE.equals(
                 restTemplate.postForObject(
-                    "http://localhost:8082/forks/" + forkId + "/take",
+                    "http://localhost:8082/forks/take?left=" + leftFork + "&right=" + rightFork,
                     null,
                     Boolean.class)
             );
         } catch (Exception e) {
             return false;
         }
+    }
+
+    // Affiche l'état du philosophe dans sa propre console
+    private void logState(String state) {
+        System.out.println("Philosophe " + philosopherId + " : " + state);
     }
 
     private void releaseFork(int forkId) {
