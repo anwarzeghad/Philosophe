@@ -1,0 +1,22 @@
+Failles de la version naive du superviseur (partie 2)
+Tests : supervisor-service/src/test/java/.../SupervisorNaiveFlawsTest.java
+
+F1 - Verification puis prise non atomiques
+     Le philosophe demande "la fourchette est libre ?" puis la prend avec un second appel.
+     Un autre philosophe peut la prendre entre les deux, donc la reponse "oui" ne vaut rien.
+
+F2 - Deux philosophes avec la meme fourchette
+     Si deux demandes arrivent en meme temps, les deux peuvent reussir.
+     Mesure : environ 4 a 6 cas sur 2000 essais (varie a chaque lancement).
+
+F3 - Interblocage
+     Si les 5 philosophes prennent leur fourchette gauche en meme temps,
+     aucun ne peut prendre la droite et plus personne ne mange.
+
+F4 - Famine
+     Pas de file d'attente ni d'equite : un voisin peut reprendre la fourchette
+     avant le philosophe qui l'attend, qui peut ne jamais manger.
+
+F5 - Liberation sans controle
+     N'importe qui peut liberer n'importe quelle fourchette, meme celle d'un autre
+     ou une fourchette jamais prise.
