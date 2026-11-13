@@ -8,7 +8,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executor;
@@ -55,6 +57,7 @@ public class ForkProtocol {
     private final PeerSender sender;
     private final Executor executor;
     private final long retransmitMs;
+    private final long requestTtlMs;
 
     private final Object lock = new Object();
 
@@ -63,6 +66,7 @@ public class ForkProtocol {
     private final boolean[] tokens;                          // jetons détenus (par numéro de fourchette)
     private final Set<Request> pending = new HashSet<>();    // demandes connues, non terminées
     private final Set<Request> finished = new HashSet<>();   // demandes terminées (ne plus les admettre)
+    private final Map<Request, Long> lastSeen = new HashMap<>(); // dernier contact (ms) par demande distante
     private Request myRequest;                               // ma demande en cours
     private boolean eating;
 
@@ -79,6 +83,10 @@ public class ForkProtocol {
         this.sender = sender;
         this.executor = executor;
         this.retransmitMs = retransmitMs;
+        // Un philosophe affamé rediffuse sa demande toutes les retransmitMs : une demande
+        // distante silencieuse depuis 4 périodes est considérée périmée (FINISHED perdu,
+        // philosophe tombé en panne) et oubliée, ce qui évite de céder indéfiniment des jetons à un fantôme.
+        this.requestTtlMs = 4 * retransmitMs;
         this.tokens = new boolean[total];
         this.tokens[id] = true;   // je détiens le jeton de ma fourchette au départ
     }
@@ -134,6 +142,9 @@ public class ForkProtocol {
         Request done;
         List<Runnable> out = new ArrayList<>();
         synchronized (lock) {
+            if (myRequest == null) {
+                return;   // rien à libérer : aucune demande en cours
+            }
             eating = false;
             done = myRequest;
             myRequest = null;
@@ -155,12 +166,21 @@ public class ForkProtocol {
     // ------------------------------------------------------------------ messages reçus
 
     public void onRequest(RequestMessage m) {
+        if (!validPhilosopher(m.requesterId())) {
+            return;   // message invalide ignoré
+        }
         List<Runnable> out = new ArrayList<>();
         synchronized (lock) {
             clock = Math.max(clock, m.timestamp()) + 1;
             Request r = new Request(m.requesterId(), m.timestamp());
-            if (!finished.contains(r) && pending.add(r)) {
+            if (!finished.contains(r) && !isStale(r)) {
+                lastSeen.put(r, System.currentTimeMillis());
+            }
+            if (!finished.contains(r) && !isStale(r) && pending.add(r)) {
                 trace("REÇOIT demande de P" + r.id() + " (ts=" + r.ts() + ")");
+                // un philosophe n'a qu'une demande à la fois : les plus anciennes sont périmées
+                // (leur message FINISHED a pu être perdu)
+                pending.removeIf(o -> o.id() == r.id() && o.ts() < r.ts());
             }
             evaluate(out);
         }
@@ -168,17 +188,24 @@ public class ForkProtocol {
     }
 
     public void onFinished(FinishedMessage m) {
+        if (!validPhilosopher(m.requesterId())) {
+            return;
+        }
         List<Runnable> out = new ArrayList<>();
         synchronized (lock) {
             Request r = new Request(m.requesterId(), m.timestamp());
-            pending.remove(r);
+            pending.removeIf(o -> o.id() == r.id() && o.ts() <= r.ts());
             finished.add(r);
+            trace("REÇOIT FINISHED de P" + r.id() + " (ts=" + r.ts() + ")");
             evaluate(out);
         }
         run(out);
     }
 
     public void onToken(TokenMessage m) {
+        if (m.fork() < 0 || m.fork() >= total) {
+            return;
+        }
         List<Runnable> out = new ArrayList<>();
         synchronized (lock) {
             clock = Math.max(clock, m.timestamp()) + 1;
@@ -189,7 +216,77 @@ public class ForkProtocol {
         run(out);
     }
 
+    // ------------------------------------------------------------------ observation (tests, supervision)
+
+    public boolean holdsToken(int fork) {
+        synchronized (lock) {
+            return tokens[fork];
+        }
+    }
+
+    public boolean isEating() {
+        synchronized (lock) {
+            return eating;
+        }
+    }
+
+    /** État lisible (diagnostic) : jetons détenus, demande en cours, demandes mémorisées. */
+    public String describeState() {
+        synchronized (lock) {
+            StringBuilder sb = new StringBuilder("P" + id + " jetons=");
+            for (int f = 0; f < total; f++) {
+                if (tokens[f]) sb.append('F').append(f).append(' ');
+            }
+            sb.append("| ma demande=").append(myRequest == null ? "-" : "ts" + myRequest.ts());
+            sb.append(" eating=").append(eating).append(" | pending=");
+            pending.stream().sorted().forEach(r -> sb.append("P").append(r.id()).append("@").append(r.ts()).append(' '));
+            return sb.toString();
+        }
+    }
+
+    public int pendingCount() {
+        synchronized (lock) {
+            return pending.size();
+        }
+    }
+
     // ------------------------------------------------------------------ logique interne
+
+    /** Oublie les demandes distantes qui n'ont plus donné signe de vie (voir requestTtlMs). */
+    private void expireSilentRequests() {
+        long now = System.currentTimeMillis();
+        pending.removeIf(r -> {
+            if (r.equals(myRequest)) {
+                return false;
+            }
+            Long seen = lastSeen.get(r);
+            boolean expired = seen != null && now - seen > requestTtlMs;
+            if (expired) {
+                lastSeen.remove(r);
+                trace("OUBLIE demande périmée de P" + r.id() + " (ts=" + r.ts() + ")");
+            }
+            return expired;
+        });
+    }
+
+    /** Vrai si une demande plus récente du même philosophe est déjà connue ou terminée. */
+    private boolean isStale(Request r) {
+        for (Request o : pending) {
+            if (o.id() == r.id() && o.ts() > r.ts()) {
+                return true;
+            }
+        }
+        for (Request o : finished) {
+            if (o.id() == r.id() && o.ts() >= r.ts()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean validPhilosopher(int p) {
+        return p >= 0 && p < total;
+    }
 
     private int left() {
         return id;
@@ -220,6 +317,7 @@ public class ForkProtocol {
      * Les envois sont ajoutés à "out" et exécutés hors du verrou.
      */
     private void evaluate(List<Runnable> out) {
+        expireSilentRequests();
         if (eating) {
             return;   // on ne cède rien pendant le repas
         }
