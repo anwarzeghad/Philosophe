@@ -1,0 +1,14 @@
+# Configuration commune (variables d'environnement Spring Boot, liaison "relaxed binding").
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: philosophers-config
+data:
+  SERVER_PORT: "8080"
+  PHILOSOPHER_MODE: zookeeper
+  PHILOSOPHERS_TOTAL: "5"
+  ZOOKEEPER_CONNECT_STRING: zookeeper:2181
+  MONITOR_TRANSPORT: kafka
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka-0.kafka:9092
+  PHILOSOPHERS_PEER_URL_TEMPLATE: http://philosopher-{id}.philosopher:8080
+  LOGGING_STRUCTURED_FORMAT_CONSOLE: logstash

@@ -1,13 +1,13 @@
 package com.philosophers.philosopher_service.runner;
 
 import com.philosophers.philosopher_service.dto.EventDto;
+import com.philosophers.philosopher_service.events.EventPublisher;
 import com.philosophers.philosopher_service.protocol.ForkProtocol;
 import com.philosophers.philosopher_service.protocol.ZookeeperForkLock;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalTime;
 import java.util.Random;
@@ -21,7 +21,7 @@ import java.util.Random;
 public class ZookeeperPhilosopherRunner implements CommandLineRunner {
 
     private final ZookeeperForkLock forkLock;
-    private final RestTemplate restTemplate;
+    private final EventPublisher events;
     private final ForkProtocol clock;
     private final Random random = new Random();
 
@@ -29,9 +29,9 @@ public class ZookeeperPhilosopherRunner implements CommandLineRunner {
     private int philosopherId;
 
     public ZookeeperPhilosopherRunner(
-            ZookeeperForkLock forkLock, RestTemplate restTemplate, ForkProtocol clock) {
+            ZookeeperForkLock forkLock, EventPublisher events, ForkProtocol clock) {
         this.forkLock = forkLock;
-        this.restTemplate = restTemplate;
+        this.events = events;
         this.clock = clock;
     }
 
@@ -67,10 +67,6 @@ public class ZookeeperPhilosopherRunner implements CommandLineRunner {
 
     private void sendEvent(String state) {
         EventDto event = new EventDto(philosopherId, state, clock.nextClock());
-        try {
-            restTemplate.postForObject("http://localhost:8080/events", event, Void.class);
-        } catch (Exception e) {
-            System.err.println("Impossible de contacter le moniteur : " + e.getMessage());
-        }
+        events.publish(event);
     }
 }

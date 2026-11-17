@@ -1,0 +1,75 @@
+# Les 5 philosophes : un StatefulSet, donc des pods nommés philosopher-0 .. philosopher-4.
+# L'identifiant du philosophe est le numéro d'ordre du pod (étiquette apps.kubernetes.io/pod-index,
+# Kubernetes >= 1.28). Le Service headless donne à chaque pod un nom DNS stable :
+# philosopher-3.philosopher -> utilisé par les autres pour le graphe Master-Worker (partie 5).
+apiVersion: v1
+kind: Service
+metadata:
+  name: philosopher
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector: {app: philosopher}
+  ports:
+    - name: http
+      port: 8080
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: philosopher
+spec:
+  serviceName: philosopher
+  replicas: 5
+  # les 5 pods démarrent ensemble (pas l'un après l'autre) : aucun philosophe n'attend les autres
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels: {app: philosopher}
+  template:
+    metadata:
+      labels: {app: philosopher}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8080"
+    spec:
+      terminationGracePeriodSeconds: 20
+      containers:
+        - name: philosopher
+          image: philosophers/philosopher-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - {name: http, containerPort: 8080}
+          envFrom:
+            - configMapRef: {name: philosophers-config}
+          env:
+            - name: PHILOSOPHER_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['apps.kubernetes.io/pod-index']
+          startupProbe:
+            httpGet: {path: /actuator/health/liveness, port: http}
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: {path: /actuator/health/liveness, port: http}
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: {path: /actuator/health/readiness, port: http}
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {memory: 512Mi}
+---
+# Pendant une maintenance du cluster, au plus 2 philosophes sont arrêtés volontairement à la fois
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: philosopher
+spec:
+  minAvailable: 3
+  selector:
+    matchLabels: {app: philosopher}

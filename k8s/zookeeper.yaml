@@ -1,0 +1,40 @@
+# ZooKeeper : verrous distribués des fourchettes (partie 3.4). Une seule réplique suffit pour le projet.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zookeeper
+  labels: {app: zookeeper}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: zookeeper}
+  template:
+    metadata:
+      labels: {app: zookeeper}
+    spec:
+      containers:
+        - name: zookeeper
+          image: zookeeper:3.9.4
+          ports:
+            - containerPort: 2181
+          readinessProbe:
+            tcpSocket: {port: 2181}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket: {port: 2181}
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {memory: 512Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper
+spec:
+  selector: {app: zookeeper}
+  ports:
+    - port: 2181
+      targetPort: 2181
