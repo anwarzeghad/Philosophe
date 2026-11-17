@@ -24,7 +24,11 @@ import static org.junit.jupiter.api.Assertions.*;
         "spring.kafka.producer.key-serializer=org.apache.kafka.common.serialization.StringSerializer",
         "spring.kafka.producer.value-serializer=org.springframework.kafka.support.serializer.JacksonJsonSerializer",
         "spring.kafka.producer.acks=all",
-        "spring.kafka.producer.properties.spring.json.add.type.headers=false"
+        "spring.kafka.producer.properties.spring.json.add.type.headers=false",
+        // mêmes délais que application.properties : la configuration réelle doit être valide
+        "spring.kafka.producer.properties.max.block.ms=2000",
+        "spring.kafka.producer.properties.request.timeout.ms=5000",
+        "spring.kafka.producer.properties.delivery.timeout.ms=10000"
 })
 @EmbeddedKafka(partitions = 1, topics = "philosophers-events")
 class KafkaEventPublisherTest {
