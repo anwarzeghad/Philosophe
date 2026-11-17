@@ -3,7 +3,6 @@ package com.philosophers.philosopher_service.protocol;
 import com.philosophers.philosopher_service.dto.FinishedMessage;
 import com.philosophers.philosopher_service.dto.RequestMessage;
 import com.philosophers.philosopher_service.dto.TokenMessage;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
@@ -19,12 +18,11 @@ public class PeerClient implements PeerSender {
     private static final long PAUSE_BETWEEN_ATTEMPTS_MS = 300;
 
     private final RestTemplate restTemplate;
+    private final PeerUrls peerUrls;
 
-    @Value("${philosophers.base-port:9000}")
-    private int basePort;
-
-    public PeerClient(RestTemplate restTemplate) {
+    public PeerClient(RestTemplate restTemplate, PeerUrls peerUrls) {
         this.restTemplate = restTemplate;
+        this.peerUrls = peerUrls;
     }
 
     @Override
@@ -43,7 +41,7 @@ public class PeerClient implements PeerSender {
     }
 
     private boolean post(int peerId, String path, Object body) {
-        String url = "http://localhost:" + (basePort + peerId) + path;
+        String url = peerUrls.of(peerId) + path;
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
                 restTemplate.postForObject(url, body, Void.class);

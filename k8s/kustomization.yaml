@@ -1,0 +1,25 @@
+# Déploiement : kubectl apply -k k8s
+# Les images sont construites localement (docker build) ou publiées par la CI sur ghcr.io ;
+# la CI remplace les noms ci-dessous avec "kustomize edit set image".
+#
+#   docker build -t philosophers/monitor-service:latest monitor-service
+#   docker build -t philosophers/philosopher-service:latest philosopher-service
+#   kubectl apply -k k8s
+#   kubectl -n philosophers get pods -w
+#   kubectl -n philosophers port-forward svc/monitor 8080:8080     puis http://localhost:8080
+#   kubectl -n philosophers delete pod philosopher-2                (panne : le pod est recréé)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: philosophers
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - zookeeper.yaml
+  - kafka.yaml
+  - monitor.yaml
+  - philosophers.yaml
+images:
+  - name: philosophers/monitor-service
+    newTag: latest
+  - name: philosophers/philosopher-service
+    newTag: latest

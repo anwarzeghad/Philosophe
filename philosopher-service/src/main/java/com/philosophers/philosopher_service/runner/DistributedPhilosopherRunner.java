@@ -1,12 +1,12 @@
 package com.philosophers.philosopher_service.runner;
 
 import com.philosophers.philosopher_service.dto.EventDto;
+import com.philosophers.philosopher_service.events.EventPublisher;
 import com.philosophers.philosopher_service.protocol.ForkProtocol;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalTime;
 import java.util.Random;
@@ -20,15 +20,15 @@ import java.util.Random;
 public class DistributedPhilosopherRunner implements CommandLineRunner {
 
     private final ForkProtocol protocol;
-    private final RestTemplate restTemplate;
+    private final EventPublisher events;
     private final Random random = new Random();
 
     @Value("${philosopher.id:0}")
     private int philosopherId;
 
-    public DistributedPhilosopherRunner(ForkProtocol protocol, RestTemplate restTemplate) {
+    public DistributedPhilosopherRunner(ForkProtocol protocol, EventPublisher events) {
         this.protocol = protocol;
-        this.restTemplate = restTemplate;
+        this.events = events;
     }
 
     @Override
@@ -63,10 +63,6 @@ public class DistributedPhilosopherRunner implements CommandLineRunner {
 
     private void sendEvent(String state) {
         EventDto event = new EventDto(philosopherId, state, protocol.nextClock());
-        try {
-            restTemplate.postForObject("http://localhost:8080/events", event, Void.class);
-        } catch (Exception e) {
-            System.err.println("Impossible de contacter le moniteur : " + e.getMessage());
-        }
+        events.publish(event);
     }
 }

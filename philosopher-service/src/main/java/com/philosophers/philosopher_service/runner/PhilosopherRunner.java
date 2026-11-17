@@ -1,6 +1,7 @@
 package com.philosophers.philosopher_service.runner;
 
 import com.philosophers.philosopher_service.dto.EventDto;
+import com.philosophers.philosopher_service.events.EventPublisher;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.CommandLineRunner;
@@ -16,6 +17,7 @@ import java.util.Random;
 public class PhilosopherRunner implements CommandLineRunner {
 
     private final RestTemplate restTemplate;
+    private final EventPublisher events;
     private final Random random = new Random();
 
     private long logicalClock = 0;
@@ -26,8 +28,12 @@ public class PhilosopherRunner implements CommandLineRunner {
     @Value("${philosophers.total:5}")
     private int totalPhilosophers;
 
-    public PhilosopherRunner(RestTemplate restTemplate) {
+    @Value("${supervisor.url:http://localhost:8082}")
+    private String supervisorUrl;
+
+    public PhilosopherRunner(RestTemplate restTemplate, EventPublisher events) {
         this.restTemplate = restTemplate;
+        this.events = events;
     }
 
     @Override
@@ -70,7 +76,7 @@ public class PhilosopherRunner implements CommandLineRunner {
         try {
             return Boolean.TRUE.equals(
                 restTemplate.postForObject(
-                    "http://localhost:8082/forks/take?left=" + leftFork + "&right=" + rightFork,
+                    supervisorUrl + "/forks/take?left=" + leftFork + "&right=" + rightFork,
                     null,
                     Boolean.class)
             );
@@ -87,7 +93,7 @@ public class PhilosopherRunner implements CommandLineRunner {
     private void releaseFork(int forkId) {
         try {
             restTemplate.postForObject(
-                "http://localhost:8082/forks/" + forkId + "/release",
+                supervisorUrl + "/forks/" + forkId + "/release",
                 null,
                 Void.class);
         } catch (Exception e) {
@@ -99,10 +105,6 @@ public class PhilosopherRunner implements CommandLineRunner {
         logicalClock++;
         EventDto event = new EventDto(philosopherId, state, logicalClock);
 
-        try {
-            restTemplate.postForObject("http://localhost:8080/events", event, Void.class);
-        } catch (Exception e) {
-            System.err.println("Impossible de contacter le moniteur : " + e.getMessage());
-        }
+        events.publish(event);
     }
 }
