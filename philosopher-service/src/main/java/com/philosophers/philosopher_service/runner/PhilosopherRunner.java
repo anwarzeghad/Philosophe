@@ -37,7 +37,23 @@ public class PhilosopherRunner implements CommandLineRunner {
     }
 
     @Override
-    public void run(String... args) throws Exception {
+    public void run(String... args) {
+        // La boucle tourne dans un thread à part : run() doit rendre la main, sinon Spring ne
+        // déclare jamais l'application "prête" et la sonde readiness de Kubernetes échoue.
+        Thread loop = new Thread(() -> {
+            try {
+                loop();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }, "philosopher-loop");
+        loop.setDaemon(true);
+        loop.start();
+    }
+
+    private void loop() throws Exception {
         Thread.sleep(3000);
 
         int leftFork = philosopherId;
