@@ -132,6 +132,11 @@ class GraphMasterTest {
             if (worker == 1) {
                 throw new IllegalStateException("worker 1 en panne");
             }
+            try {
+                Thread.sleep(30);   // workers 2 et 3 un peu lents : le worker 1 a le temps d'échouer deux fois
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
             return DegreeComputation.compute(task.taskId(), task.nodes(), task.edges());
         };
         int[] edges = RandomGraph.edges(100, 3000, 5);
